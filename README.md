@@ -44,6 +44,8 @@ Seul le delta est envoyé, dans un seul appel `/configure`, ce qui provoque un s
 - Syntaxe BGP utilisée : VyOS 1.4+ (`protocols bgp system-as`). Sur VyOS 1.3 la syntaxe est `protocols bgp <AS> neighbor ...` : le script serait à adapter.
 - `verify=False` est toléré en TP (certificat auto-signé) ; à éviter en production.
 - La capture `show bgp summary` est à ajouter dans le rendu.
+- `_post` traite un code HTTP 400 sur `/retrieve` comme « chemin absent de la configuration » (routeur sans BGP au départ).
+- `get_children` retire l'enveloppe que `showConfig` ajoute autour du dernier élément du chemin, sinon l'idempotence échoue.
 
 ## Git
 ```bash

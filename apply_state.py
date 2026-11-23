@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
-"""TP 12 - VyOS : application déclarative d'un état désiré (YAML) via l'API HTTP.
+﻿#!/usr/bin/env python3
+"""TP 12 - VyOS : application dÃ©clarative d'un Ã©tat dÃ©sirÃ© (YAML) via l'API HTTP.
 
-Principe : on lit l'état actuel via /retrieve, on calcule le delta avec
-desired_state.yaml, puis on envoie uniquement les set/delete nécessaires
-(idempotence). Les valeurs gérées qui ne sont plus dans le YAML sont
-supprimées (correction de dérive).
+Principe : on lit l'Ã©tat actuel via /retrieve, on calcule le delta avec
+desired_state.yaml, puis on envoie uniquement les set/delete nÃ©cessaires
+(idempotence). Les valeurs gÃ©rÃ©es qui ne sont plus dans le YAML sont
+supprimÃ©es (correction de dÃ©rive).
 
 Syntaxe BGP : VyOS 1.4+ (protocols bgp system-as ...).
 Pour VyOS 1.3 : adapter BGP_BASE / system-as (voir README).
@@ -32,10 +32,12 @@ class VyOS:
         data = {"data": json.dumps(payload), "key": self.key}
         r = requests.post(f"https://{self.host}/{endpoint}", data=data,
                           verify=False, timeout=10)
+        if r.status_code == 400 and endpoint == 'retrieve':
+            return {"success": False, "data": None}
         r.raise_for_status()
         return r.json()
 
-    # ---------- lecture de l'état actuel ----------
+    # ---------- lecture de l'Ã©tat actuel ----------
     def get_value(self, path):
         b = self._post("retrieve", {"op": "returnValue", "path": path})
         return b["data"] if b.get("success") else None
@@ -47,16 +49,20 @@ class VyOS:
     def get_children(self, path):
         b = self._post("retrieve", {"op": "showConfig", "path": path})
         if b.get("success") and isinstance(b.get("data"), dict):
-            return set(b["data"].keys())
+            data = b["data"]
+            leaf = path[-1]
+            if set(data.keys()) == {leaf} and isinstance(data[leaf], dict):
+                data = data[leaf]
+            return set(data.keys())
         return set()
 
     def exists(self, path):
         b = self._post("retrieve", {"op": "exists", "path": path})
         return bool(b.get("success") and b.get("data"))
 
-    # ---------- écriture ----------
+    # ---------- Ã©criture ----------
     def configure(self, commands):
-        """Un seul appel = un seul commit atomique côté VyOS."""
+        """Un seul appel = un seul commit atomique cÃ´tÃ© VyOS."""
         return self._post("configure", commands)
 
     def save(self):
@@ -68,7 +74,7 @@ def as_list(x):
 
 
 def plan(api, desired):
-    """Retourne la liste des commandes set/delete à envoyer (delta)."""
+    """Retourne la liste des commandes set/delete Ã  envoyer (delta)."""
     cmds = []
 
     def set_leaf(path, value):
@@ -86,7 +92,7 @@ def plan(api, desired):
         have = api.get_values(base)
         for a in sorted(want - have):
             cmds.append({"op": "set", "path": base, "value": a})
-        for a in sorted(have - want):  # dérive : adresse en trop
+        for a in sorted(have - want):  # dÃ©rive : adresse en trop
             cmds.append({"op": "delete", "path": base + [a]})
 
     # --- BGP ---
@@ -124,7 +130,7 @@ def main():
     args = p.parse_args()
 
     if not args.key:
-        sys.exit("Clé API manquante : export VYOS_KEY=... ou --key")
+        sys.exit("ClÃ© API manquante : export VYOS_KEY=... ou --key")
 
     with open(args.state, encoding="utf-8") as f:
         desired = yaml.safe_load(f)
@@ -133,15 +139,15 @@ def main():
     cmds = plan(api, desired)
 
     if not cmds:
-        print("Aucun changement : l'état actuel correspond à l'état désiré.")
+        print("Aucun changement : l'Ã©tat actuel correspond Ã  l'Ã©tat dÃ©sirÃ©.")
         return
 
-    print(f"{len(cmds)} modification(s) à appliquer :")
+    print(f"{len(cmds)} modification(s) Ã  appliquer :")
     for c in cmds:
         print(" ", c["op"], "/".join(c["path"]), c.get("value", ""))
 
     if args.dry_run:
-        print("(dry-run : rien n'a été envoyé)")
+        print("(dry-run : rien n'a Ã©tÃ© envoyÃ©)")
         return
 
     res = api.configure(cmds)  # commit atomique
@@ -150,8 +156,10 @@ def main():
     res = api.save()
     if not res.get("success"):
         sys.exit(f"Erreur save : {res.get('error')}")
-    print("Configuration appliquée (commit) et sauvegardée (save).")
+    print("Configuration appliquÃ©e (commit) et sauvegardÃ©e (save).")
 
 
 if __name__ == "__main__":
     main()
+
+
